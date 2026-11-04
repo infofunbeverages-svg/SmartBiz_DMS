@@ -1,195 +1,222 @@
-import { create } from 'zustand';
-import { User } from '../types';
-import { UserRole } from '../types/user';
-import { supabase } from './supabase';
+// ============================================================
+// SmartBiz Nexus — Global Types (v2 - Full Feature Set)
+// ============================================================
 
-// ── Helpers ───────────────────────────────────────────────
+export type SubscriptionTier = 'FREE' | 'GROWTH' | 'ENTERPRISE'
+export type PaymentMode = 'CASH' | 'CARD' | 'QR' | 'CREDIT' | 'LANKAQR' | 'ONLINE_TRANSFER'
+export type Language = 'en' | 'si' | 'ta'
+export type PricingTier = 'RETAIL' | 'WHOLESALE' | 'LOYALTY' | 'SPECIAL'
+export type ChequeStatus = 'PENDING' | 'DEPOSITED' | 'REALIZED' | 'BOUNCED'
 
-const normalizeRole = (role: string | null | undefined): UserRole => {
-  if (!role) return UserRole.SALES_REP;
-  const r = role.toUpperCase().trim();
-  // Bug fix: database eke 'REP' kiyala thiyena rows 'SALES_REP' widihata treat karanawa
-  if (r === 'REP') return UserRole.SALES_REP;
-  if (Object.values(UserRole).includes(r as UserRole)) return r as UserRole;
-  console.warn(`Invalid role "${role}" — defaulting to SALES_REP`);
-  return UserRole.SALES_REP;
-};
+export * from './user'
 
-/** Profile DB row → User object (DRY — login ekai checkSession ekai deka use karanawa) */
-const mapProfileToUser = (
-  profile: Record<string, unknown>,
-  authUser: { id: string; email?: string; created_at: string; user_metadata?: Record<string, unknown> }
-): User => ({
-  id:               profile.id as string,
-  username:         (authUser.email ?? '').split('@')[0] || 'user',
-  name:             (profile.full_name as string) || authUser.email || 'User',
-  email:            authUser.email ?? '',
-  role:             normalizeRole(profile.role as string),
-  companyId:        (profile.company_id as string) || undefined,
-  agencyId:         (profile.agency_id as string) || undefined,
-  managedAgencies:  (profile.managed_agencies as string[]) || undefined,
-  territoryId:      (profile.territory_id as string) || undefined,
-  createdAt:        authUser.created_at,
-  updatedAt:        new Date().toISOString(),
-});
-
-// ── Store ─────────────────────────────────────────────────
-
-interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  hasPermission: (roles: UserRole[]) => boolean;
-  checkSession: () => Promise<void>;
+// ---------- Tenant ----------
+export interface Tenant {
+  tenant_id: string
+  business_name: string
+  owner_phone: string
+  subscription_tier: SubscriptionTier
+  subscription_status: 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'SUSPENDED'
+  subscription_expires_at: string
+  app_settings: AppSettings
+  created_at: string
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
-  error: null,
+export interface AppSettings {
+  allow_negative_stock: boolean
+  manager_approval_for_price_edit: boolean
+  tax_rate: number
+  receipt_footer: string
+  language: Language
+}
 
-  checkSession: async () => {
-    set({ isLoading: true });
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session?.user) {
-        set({ user: null, isAuthenticated: false, isLoading: false });
-        return;
-      }
+// ---------- Branch ----------
+export interface Branch {
+  branch_id: string
+  tenant_id: string
+  branch_name: string
+  address?: string
+  is_active: boolean
+  is_main_branch?: boolean
+}
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+// ---------- Category ----------
+export interface Category {
+  category_id: string
+  tenant_id: string
+  name_en: string
+  name_si?: string
+  name_ta?: string
+}
 
-      if (profileError || !profile) {
-        // Profile naha — create karanawa (Bug fix: role 'REP' → 'SALES_REP')
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id:        session.user.id,
-            full_name: session.user.user_metadata?.name ?? session.user.email?.split('@')[0] ?? 'User',
-            role:      'SALES_REP', // Bug fix: kalin 'REP' kiyala thiuna
-            company_id: null,
-          })
-          .select()
-          .single();
+// ---------- UOM Conversion ----------
+export interface UOMConversion {
+  unit: string        // 'kg', 'pack', 'piece'
+  label: string       // display label
+  factor: number      // 1 kg = 1000 (base: gram), 1 pack = 12 (base: pcs)
+  price_override?: number  // optional price for this unit
+}
 
-        if (createError || !newProfile) {
-          // Fallback — still allow login
-          const fallback: User = {
-            id:        session.user.id,
-            username:  (session.user.email ?? '').split('@')[0],
-            name:      session.user.email ?? 'User',
-            email:     session.user.email ?? '',
-            role:      UserRole.SALES_REP,
-            createdAt: session.user.created_at,
-            updatedAt: new Date().toISOString(),
-          };
-          set({ user: fallback, isAuthenticated: true, isLoading: false });
-        } else {
-          set({ user: mapProfileToUser(newProfile, session.user), isAuthenticated: true, isLoading: false });
-        }
-      } else {
-        set({ user: mapProfileToUser(profile, session.user), isAuthenticated: true, isLoading: false });
-      }
-    } catch (err) {
-      console.error('checkSession error:', err);
-      set({ user: null, isAuthenticated: false, isLoading: false });
-    }
-  },
+// ---------- Item (Multi-UOM + Multi-Price + Expiry) ----------
+export interface Item {
+  item_id: string
+  tenant_id: string
+  branch_id: string
+  category_id?: string
+  barcode?: string
+  name: string
+  name_si?: string
+  name_ta?: string
+  base_unit: string           // smallest unit: 'gram', 'ml', 'pcs', 'inch'
+  uom_conversions: UOMConversion[]  // [{unit:'kg',factor:1000,price:500}]
+  prices: ItemPrices          // multi-tier pricing
+  stock_in_base_unit: number  // always stored in base unit
+  low_stock_threshold: number
+  track_expiry: boolean
+  track_serial: boolean
+  updated_at: string
+}
 
-  login: async (email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+export interface ItemPrices {
+  retail: number
+  wholesale: number
+  loyalty: number
+  special: number
+}
 
-      if (error) {
-        let msg = 'Invalid email or password';
-        if (error.status === 400) {
-          if (error.message?.includes('Invalid login credentials'))
-            msg = 'Invalid email or password. Please check your credentials.';
-          else if (error.message?.includes('Email not confirmed'))
-            msg = 'Please confirm your email before logging in.';
-          else if (error.message?.includes('Email rate limit exceeded'))
-            msg = 'Too many login attempts. Please try again later.';
-          else
-            msg = `Login failed: ${error.message}`;
-        } else if (error.status === 429) {
-          msg = 'Too many requests. Please try again later.';
-        } else if (error.status === 500) {
-          msg = 'Server error. Please try again later.';
-        }
-        set({ error: msg, isLoading: false });
-        return;
-      }
+// ---------- Stock Batch (Expiry tracking) ----------
+export interface StockBatch {
+  batch_id: string
+  item_id: string
+  tenant_id: string
+  batch_number?: string
+  qty_in_base_unit: number
+  cost_price_per_unit: number
+  expiry_date?: string
+  created_at: string
+}
 
-      if (!data.user) {
-        set({ error: 'Login failed — no user returned.', isLoading: false });
-        return;
-      }
+// ---------- Customer (Multi-tier + Blacklist) ----------
+export interface Customer {
+  customer_id: string
+  tenant_id: string
+  name: string
+  phone?: string
+  pricing_tier: PricingTier
+  loyalty_points: number
+  credit_limit: number
+  outstanding_balance: number
+  is_blacklisted: boolean
+  created_at: string
+}
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
+// ---------- Cheque ----------
+export interface Cheque {
+  cheque_id: string
+  tenant_id: string
+  customer_id?: string
+  customer_name?: string
+  cheque_number: string
+  bank_name: string
+  amount: number
+  due_date: string
+  status: ChequeStatus
+  notes?: string
+  created_at: string
+}
 
-      if (profileError || !profile) {
-        // Bug fix: role 'REP' → 'SALES_REP'
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id:        data.user.id,
-            full_name: data.user.user_metadata?.name ?? data.user.email?.split('@')[0] ?? 'User',
-            role:      'SALES_REP',
-            company_id: null,
-          })
-          .select()
-          .single();
+// ---------- Promotion / Flash Sale ----------
+export interface Promotion {
+  promo_id: string
+  tenant_id: string
+  name: string
+  start_time: string
+  end_time: string
+  discount_type: 'FLAT_OFF' | 'PERCENTAGE'
+  discount_value: number
+  applied_item_ids: string[]
+  is_active: boolean
+}
 
-        if (createError || !newProfile) {
-          const fallback: User = {
-            id:        data.user.id,
-            username:  (data.user.email ?? '').split('@')[0],
-            name:      data.user.email ?? 'User',
-            email:     data.user.email ?? '',
-            role:      UserRole.SALES_REP,
-            createdAt: data.user.created_at,
-            updatedAt: new Date().toISOString(),
-          };
-          set({ user: fallback, isAuthenticated: true, isLoading: false, error: null });
-        } else {
-          set({ user: mapProfileToUser(newProfile, data.user), isAuthenticated: true, isLoading: false, error: null });
-        }
-      } else {
-        set({ user: mapProfileToUser(profile, data.user), isAuthenticated: true, isLoading: false, error: null });
-      }
-    } catch (err: unknown) {
-      const msg = (err as Error)?.message ?? 'An unexpected error occurred';
-      console.error('login error:', err);
-      set({ error: msg, isLoading: false });
-    }
-  },
+// ---------- Invoice ----------
+export interface Invoice {
+  invoice_id: string
+  tenant_id: string
+  branch_id: string
+  user_id: string
+  customer_id?: string
+  total_amount: number
+  discount: number
+  tax: number
+  delivery_charge: number
+  payment_mode: PaymentMode
+  payment_status: 'PAID' | 'PENDING' | 'COD'
+  is_synced: boolean
+  client_timestamp: string
+  created_at: string
+}
 
-  logout: async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('logout error:', err);
-    } finally {
-      set({ user: null, isAuthenticated: false });
-    }
-  },
+// ---------- Invoice Item ----------
+export interface InvoiceItem {
+  id?: number
+  invoice_id: string
+  item_id: string
+  item_name?: string
+  serial_number?: string
+  quantity_in_base_unit: number
+  unit_label: string
+  unit_price: number
+  discount: number
+}
 
-  hasPermission: (roles) => {
-    const { user } = get();
-    if (!user) return false;
-    return roles.includes(user.role);
-  },
-}));
+// ---------- Expense ----------
+export interface Expense {
+  expense_id: string
+  tenant_id: string
+  branch_id: string
+  category: string
+  amount: number
+  note?: string
+  created_at: string
+}
+
+// ---------- Cart (POS local state) ----------
+export interface CartItem {
+  item_id: string
+  name: string
+  unit_label: string
+  unit_factor: number        // base units per display unit
+  selling_price: number      // price for selected unit
+  quantity: number           // in display unit
+  discount: number
+  serial_number?: string
+  promo_discount?: number    // auto-applied promo
+}
+
+export interface Cart {
+  items: CartItem[]
+  customer_id?: string
+  customer_pricing_tier: PricingTier
+  payment_mode: PaymentMode
+  discount: number
+  delivery_charge: number
+}
+
+// ---------- Sync ----------
+export interface SyncRecord {
+  id?: number
+  tenant_id: string
+  table_name: string
+  record_id: string
+  payload: unknown
+  synced: boolean
+  created_at: string
+}
+
+// ---------- Dashboard Stats ----------
+export interface DailyStat {
+  date: string
+  total_sales: number
+  invoice_count: number
+  top_item?: string
+}
