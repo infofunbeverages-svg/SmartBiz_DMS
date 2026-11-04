@@ -1,18 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim().replace(/^["']|["']$/g, '');
+const supabaseAnonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim().replace(/^["']|["']$/g, '');
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables. Please check your .env file.');
-  console.error('VITE_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
-  console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
-}
+// Shown on screen by main.tsx instead of a blank white page
+export const supabaseConfigError: string | null =
+  !supabaseUrl || !supabaseAnonKey
+    ? `Missing env vars → VITE_SUPABASE_URL: ${supabaseUrl ? 'OK' : 'MISSING'}, VITE_SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'OK' : 'MISSING'}`
+    : /^eyJ/.test(supabaseAnonKey) || supabaseAnonKey.startsWith('sb_publishable_')
+      ? null
+      : 'VITE_SUPABASE_ANON_KEY does not look like a Supabase anon/publishable key.';
 
-console.log('Supabase connection initialized with URL:', supabaseUrl);
+if (supabaseConfigError) console.error(supabaseConfigError);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Never throw at import time (that caused the white screen)
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
 
 // Database types (these should match your Supabase schema)
 export interface Database {
