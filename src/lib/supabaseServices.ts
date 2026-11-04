@@ -19,7 +19,7 @@ import {
 export const productService = {
   async getAll(): Promise<Product[]> {
     const { data, error } = await supabase
-      .from('inventory')
+      .from('products')
       .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -27,33 +27,32 @@ export const productService = {
   },
 
   async getById(id: string): Promise<Product | null> {
-    const { data, error } = await supabase.from('inventory').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
     if (error) return null;
     return data ? mapProduct(data) : null;
   },
 
   async create(product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
     const { data, error } = await supabase
-      .from('inventory')
-      .insert({ name: product.name, description: product.description, code: product.sku, sku: product.sku, category: product.category, price: product.price, unit: 'unit' })
+      .from('products')
+      .insert({ name: product.name, code: product.sku, category: product.category, price: product.price })
       .select().single();
     if (error) throw error;
     return mapProduct(data);
   },
 
   async update(id: string, product: Partial<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Product> {
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (product.name)        patch.name        = product.name;
-    if (product.description) patch.description = product.description;
-    if (product.category)    patch.category    = product.category;
-    if (product.price != null) patch.price     = product.price;
-    const { data, error } = await supabase.from('inventory').update(patch).eq('id', id).select().single();
+    const patch: Record<string, unknown> = {};
+    if (product.name)        patch.name     = product.name;
+    if (product.category)    patch.category = product.category;
+    if (product.price != null) patch.price  = product.price;
+    const { data, error } = await supabase.from('products').update(patch).eq('id', id).select().single();
     if (error) throw error;
     return mapProduct(data);
   },
 
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
   },
 };
@@ -62,12 +61,12 @@ function mapProduct(p: Record<string, unknown>): Product {
   return {
     id:          p.id as string,
     name:        p.name as string,
-    description: (p.description as string) ?? '',
-    sku:         (p.sku as string) ?? (p.code as string),
+    description: '',
+    sku:         (p.code as string) ?? '',
     price:       p.price as number,
     category:    (p.category as string) ?? 'Uncategorized',
     createdAt:   new Date(p.created_at as string),
-    updatedAt:   new Date(p.updated_at as string),
+    updatedAt:   new Date(p.created_at as string),
   };
 }
 
