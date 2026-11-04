@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { User, UserRole } from '../types';
+import { User } from '../types';
+import { UserRole } from '../types/user';
 import { supabase } from './supabase';
 
 // ── Helpers ───────────────────────────────────────────────
