@@ -69,39 +69,37 @@ function mapProduct(p: Record<string, unknown>): Product {
     updatedAt:   new Date(p.created_at as string),
   };
 }
-
 // ─────────────────────────────────────────────────────────
 // Order Services (Agency → Company orders)
-// Bug fix: 'companies' table → 'agencies' table
+// Fix: points to real 'replenishment_orders' tables now
 // ─────────────────────────────────────────────────────────
 export const orderService = {
   async getAll(): Promise<Order[]> {
     const { data: orders, error: ordersError } = await supabase
-      .from('draft_invoices').select('*').order('created_at', { ascending: false });
+      .from('replenishment_orders').select('*').order('created_at', { ascending: false });
     if (ordersError) throw ordersError;
     if (!orders?.length) return [];
 
     const orderIds = orders.map(o => o.id);
     const { data: items, error: itemsError } = await supabase
-      .from('draft_invoice_items').select('*').in('order_id', orderIds);
+      .from('replenishment_order_items').select('*').in('order_id', orderIds);
     if (itemsError) throw itemsError;
 
-    // Bug fix: 'companies' → 'agencies'
-    const agencyIds = [...new Set(orders.map(o => o.company_id))];
+    const agencyIds = [...new Set(orders.map(o => o.agency_id))];
     const { data: agencies } = await supabase
       .from('agencies').select('id, name, code').in('id', agencyIds);
     const agencyMap = new Map((agencies ?? []).map(a => [a.id, { name: a.name, code: a.code ?? '' }]));
 
     return orders.map(order => ({
       id:          order.id,
-      companyId:   order.company_id,
-      agencyName:  agencyMap.get(order.company_id)?.name ?? 'Unknown Agency',
-      agencyCode:  agencyMap.get(order.company_id)?.code ?? '',
-      draftDate:   order.draft_date,
+      companyId:   order.agency_id,
+      agencyName:  agencyMap.get(order.agency_id)?.name ?? 'Unknown Agency',
+      agencyCode:  agencyMap.get(order.agency_id)?.code ?? '',
+      draftDate:   order.created_at,
       status:      order.status as OrderStatus,
       totalAmount: order.total_amount,
       notes:       order.notes ?? undefined,
-      createdBy:   order.created_by,
+      createdBy:   order.requested_by,
       createdAt:   order.created_at,
       updatedAt:   order.updated_at,
       items: (items ?? []).filter(i => i.order_id === order.id).map(mapOrderItem),
@@ -109,33 +107,46 @@ export const orderService = {
   },
 
   async create(order: { companyId: string; draftDate: string; totalAmount: number; items: Omit<OrderItem, 'id' | 'orderId'>[]; notes?: string; createdBy: string }): Promise<Order> {
+    const { data: agency } = await supabase.from('agencies').select('company_id, name, code').eq('id', order.companyId).single();
+
     const { data: orderData, error: orderError } = await supabase
-      .from('draft_invoices')
-      .insert({ company_id: order.companyId, draft_date: order.draftDate, status: OrderStatus.PENDING, total_amount: order.totalAmount, notes: order.notes ?? null, created_by: order.createdBy })
+      .from('replenishment_orders')
+      .insert({
+        order_no:     `RO-${Date.now()}`,
+        agency_id:    order.companyId,
+        company_id:   agency?.company_id,
+        requested_by: order.createdBy,
+        status:       OrderStatus.PENDING,
+        total_amount: order.totalAmount,
+        notes:        order.notes ?? null,
+      })
       .select().single();
     if (orderError) throw orderError;
 
-    const orderItems = order.items.map(item => ({ order_id: orderData.id, inventory_id: item.inventoryId, quantity: item.quantity, price: item.price, discount: item.discount ?? 0, is_free: item.isFree ?? 0, total_amount: item.totalAmount }));
-    const { error: itemsError } = await supabase.from('draft_invoice_items').insert(orderItems);
+    const orderItems = order.items.map(item => ({
+      order_id:      orderData.id,
+      product_id:    item.inventoryId,
+      qty_requested: item.quantity,
+      unit_price:    item.price,
+    }));
+    const { error: itemsError } = await supabase.from('replenishment_order_items').insert(orderItems);
     if (itemsError) {
-      await supabase.from('draft_invoices').delete().eq('id', orderData.id);
+      await supabase.from('replenishment_orders').delete().eq('id', orderData.id);
       throw itemsError;
     }
 
-    // Bug fix: 'companies' → 'agencies'
-    const { data: agency } = await supabase.from('agencies').select('name, code').eq('id', order.companyId).single();
-    const { data: items } = await supabase.from('draft_invoice_items').select('*').eq('order_id', orderData.id);
+    const { data: items } = await supabase.from('replenishment_order_items').select('*').eq('order_id', orderData.id);
 
     return {
       id:          orderData.id,
-      companyId:   orderData.company_id,
+      companyId:   orderData.agency_id,
       agencyName:  agency?.name ?? 'Unknown Agency',
       agencyCode:  agency?.code ?? '',
-      draftDate:   orderData.draft_date,
+      draftDate:   orderData.created_at,
       status:      orderData.status as OrderStatus,
       totalAmount: orderData.total_amount,
       notes:       orderData.notes ?? undefined,
-      createdBy:   orderData.created_by,
+      createdBy:   orderData.requested_by,
       createdAt:   orderData.created_at,
       updatedAt:   orderData.updated_at,
       items:       (items ?? []).map(mapOrderItem),
@@ -143,7 +154,7 @@ export const orderService = {
   },
 
   async updateStatus(orderId: string, status: OrderStatus): Promise<void> {
-    const { error } = await supabase.from('draft_invoices').update({ status, updated_at: new Date().toISOString() }).eq('id', orderId);
+    const { error } = await supabase.from('replenishment_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', orderId);
     if (error) throw error;
   },
 };
@@ -152,15 +163,14 @@ function mapOrderItem(item: Record<string, unknown>): OrderItem {
   return {
     id:          item.id as string,
     orderId:     item.order_id as string,
-    inventoryId: item.inventory_id as string,
-    quantity:    item.quantity as number,
-    price:       item.price as number,
-    discount:    (item.discount as number) ?? 0,
-    isFree:      (item.is_free as number) ?? 0,
-    totalAmount: item.total_amount as number,
+    inventoryId: item.product_id as string,
+    quantity:    item.qty_requested as number,
+    price:       item.unit_price as number,
+    discount:    0,
+    isFree:      0,
+    totalAmount: (item.qty_requested as number) * (item.unit_price as number),
   };
 }
-
 // ─────────────────────────────────────────────────────────
 // Invoice / Sales Services
 // ─────────────────────────────────────────────────────────
