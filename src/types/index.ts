@@ -9,6 +9,7 @@ export type PricingTier = 'RETAIL' | 'WHOLESALE' | 'LOYALTY' | 'SPECIAL'
 export type ChequeStatus = 'PENDING' | 'DEPOSITED' | 'REALIZED' | 'BOUNCED'
 
 export * from './user'
+export * from './order'
 
 // ---------- Tenant ----------
 export interface Tenant {
