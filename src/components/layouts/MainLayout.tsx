@@ -45,7 +45,7 @@ const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { user, logout, hasPermission } = useAuthStore();
+    const { user, logout, hasPermission, profileDebug } = useAuthStore();
 
   const navGroups: NavGroup[] = [
     {
@@ -110,6 +110,13 @@ const MainLayout: React.FC = () => {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   if (!user) return <Outlet />;
+    if (profileDebug) {
+    return (
+      <div style={{ padding: 20, background: '#fee', color: '#900', fontFamily: 'monospace', fontSize: 14 }}>
+        PROFILE DEBUG: {profileDebug}
+      </div>
+    );
+    }
 
   const viewOnly = isViewOnly(user);
 
