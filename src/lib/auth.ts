@@ -1,21 +1,16 @@
 import { create } from 'zustand';
-import { User } from '../types';
-import { UserRole } from '../types/user';
+import { User, UserRole } from '../types';
 import { supabase } from './supabase';
-
-// ── Helpers ───────────────────────────────────────────────
 
 const normalizeRole = (role: string | null | undefined): UserRole => {
   if (!role) return UserRole.SALES_REP;
   const r = role.toUpperCase().trim();
-  // Bug fix: database eke 'REP' kiyala thiyena rows 'SALES_REP' widihata treat karanawa
   if (r === 'REP') return UserRole.SALES_REP;
   if (Object.values(UserRole).includes(r as UserRole)) return r as UserRole;
   console.warn(`Invalid role "${role}" — defaulting to SALES_REP`);
   return UserRole.SALES_REP;
 };
 
-/** Profile DB row → User object (DRY — login ekai checkSession ekai deka use karanawa) */
 const mapProfileToUser = (
   profile: Record<string, unknown>,
   authUser: { id: string; email?: string; created_at: string; user_metadata?: Record<string, unknown> }
@@ -33,13 +28,12 @@ const mapProfileToUser = (
   updatedAt:        new Date().toISOString(),
 });
 
-// ── Store ─────────────────────────────────────────────────
-
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  profileDebug: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (roles: UserRole[]) => boolean;
@@ -51,9 +45,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  profileDebug: null,
 
   checkSession: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, profileDebug: null });
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session?.user) {
@@ -68,20 +63,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
 
       if (profileError || !profile) {
-        // Profile naha — create karanawa (Bug fix: role 'REP' → 'SALES_REP')
+        set({
+          profileDebug: profileError
+            ? `[${profileError.code ?? 'ERR'}] ${profileError.message ?? 'unknown'}`
+            : 'No profile row returned',
+        });
+
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert({
             id:        session.user.id,
             full_name: session.user.user_metadata?.name ?? session.user.email?.split('@')[0] ?? 'User',
-            role:      'SALES_REP', // Bug fix: kalin 'REP' kiyala thiuna
+            role:      'SALES_REP',
             company_id: null,
           })
           .select()
           .single();
 
         if (createError || !newProfile) {
-          // Fallback — still allow login
           const fallback: User = {
             id:        session.user.id,
             username:  (session.user.email ?? '').split('@')[0],
@@ -99,13 +98,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: mapProfileToUser(profile, session.user), isAuthenticated: true, isLoading: false });
       }
     } catch (err) {
-      console.error('checkSession error:', err);
+      set({ profileDebug: `CATCH: ${(err as Error)?.message}` });
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 
   login: async (email, password) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, profileDebug: null });
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -116,8 +115,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             msg = 'Invalid email or password. Please check your credentials.';
           else if (error.message?.includes('Email not confirmed'))
             msg = 'Please confirm your email before logging in.';
-          else if (error.message?.includes('Email rate limit exceeded'))
-            msg = 'Too many login attempts. Please try again later.';
           else
             msg = `Login failed: ${error.message}`;
         } else if (error.status === 429) {
@@ -141,7 +138,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single();
 
       if (profileError || !profile) {
-        // Bug fix: role 'REP' → 'SALES_REP'
+        set({
+          profileDebug: profileError
+            ? `[${profileError.code ?? 'ERR'}] ${profileError.message ?? 'unknown'}`
+            : 'No profile row returned',
+        });
+
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert({
@@ -172,7 +174,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch (err: unknown) {
       const msg = (err as Error)?.message ?? 'An unexpected error occurred';
-      console.error('login error:', err);
       set({ error: msg, isLoading: false });
     }
   },
