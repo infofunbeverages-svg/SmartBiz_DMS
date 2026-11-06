@@ -1,253 +1,161 @@
-import React, { useState } from 'react';
-import { Store, Search, Filter, Plus, MapPin, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Store, Plus, X, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import Input from '../../components/ui/Input';
+import { supabase } from '../../lib/supabase';
 
 const ShopsDashboard: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedArea, setSelectedArea] = useState('all');
+  const [shops, setShops] = useState<any[]>([]);
+  const [agencies, setAgencies] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '', owner_name: '', phone: '', address: '', area: '',
+    shop_type: 'Retail', agency_id: '', credit_limit: 0,
+  });
 
-  // Mock data for demonstration
-  const shopStats = {
-    totalShops: 156,
-    activeShops: 142,
-    newShops: 8,
-    visitedToday: 24
+  useEffect(() => { fetchShops(); fetchAgencies(); }, []);
+
+  const fetchShops = async () => {
+    setIsLoading(true);
+    const { data } = await supabase.from('shops').select('*').order('created_at', { ascending: false });
+    if (data) setShops(data);
+    setIsLoading(false);
   };
+
+  const fetchAgencies = async () => {
+    const { data } = await supabase.from('agencies').select('id, name');
+    if (data) setAgencies(data);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.agency_id) { alert('Please select an agency'); return; }
+    try {
+      const { error } = await supabase.from('shops').insert([formData]);
+      if (error) throw error;
+      setIsModalOpen(false);
+      setFormData({ name: '', owner_name: '', phone: '', address: '', area: '', shop_type: 'Retail', agency_id: '', credit_limit: 0 });
+      fetchShops();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const activeShops = shops.filter(s => s.status === 'Active').length;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Shops Management</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage retail outlets and track performance
-          </p>
+          <p className="mt-1 text-sm text-gray-500">Manage retail outlets</p>
         </div>
-        <div className="mt-4 md:mt-0 space-x-2">
-          <Button variant="primary" icon={<Plus />}>
-            Add Shop
-          </Button>
-          <Button variant="secondary" icon={<Download />}>
-            Export
-          </Button>
+        <div className="mt-4 md:mt-0">
+          <Button variant="primary" icon={<Plus />} onClick={() => setIsModalOpen(true)}>Add Shop</Button>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Store className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Shops</p>
-                <h3 className="text-xl font-bold text-gray-900">{shopStats.totalShops}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Store className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active Shops</p>
-                <h3 className="text-xl font-bold text-gray-900">{shopStats.activeShops}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Store className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">New Shops</p>
-                <h3 className="text-xl font-bold text-gray-900">{shopStats.newShops}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-amber-100 rounded-lg">
-                <MapPin className="h-6 w-6 text-amber-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Visited Today</p>
-                <h3 className="text-xl font-bold text-gray-900">{shopStats.visitedToday}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card><CardContent className="p-6">
+          <p className="text-sm text-gray-500">Total Shops</p>
+          <h3 className="text-xl font-bold text-gray-900">{shops.length}</h3>
+        </CardContent></Card>
+        <Card><CardContent className="p-6">
+          <p className="text-sm text-gray-500">Active Shops</p>
+          <h3 className="text-xl font-bold text-gray-900">{activeShops}</h3>
+        </CardContent></Card>
+        <Card><CardContent className="p-6">
+          <p className="text-sm text-gray-500">Agencies Linked</p>
+          <h3 className="text-xl font-bold text-gray-900">{new Set(shops.map(s => s.agency_id)).size}</h3>
+        </CardContent></Card>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Search shops..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            icon={<Search className="h-5 w-5 text-gray-400" />}
-          />
-        </div>
-        <div className="flex gap-2">
-          <select
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value)}
-          >
-            <option value="all">All Areas</option>
-            <option value="colombo">Colombo</option>
-            <option value="kandy">Kandy</option>
-            <option value="galle">Galle</option>
-          </select>
-          <Button variant="secondary" icon={<Filter />}>
-            More Filters
-          </Button>
-        </div>
-      </div>
-
-      {/* Shops List */}
       <Card>
-        <CardHeader>
-          <CardTitle>Shops</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>All Shops</CardTitle></CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Shop
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Visit
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {[...Array(5)].map((_, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 rounded bg-gray-100 flex items-center justify-center">
-                          <Store className="h-5 w-5 text-gray-500" />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">Shop {index + 1}</div>
-                          <div className="text-sm text-gray-500">ID: SH00{index + 1}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">Colombo {index + 1}</div>
-                      <div className="text-sm text-gray-500">Sri Lanka</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">+94 71 234 567{index}</div>
-                      <div className="text-sm text-gray-500">shop{index + 1}@example.com</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                        Active
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      2 days ago
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button variant="secondary" size="sm">View Details</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Shop Performance */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Performing Shops</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[...Array(5)].map((_, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+          {isLoading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : shops.length === 0 ? (
+            <p className="text-gray-500">No shops yet. Click "Add Shop" to create one.</p>
+          ) : (
+            <div className="space-y-3">
+              {shops.map(shop => (
+                <div key={shop.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center">
                     <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
                       <Store className="h-5 w-5 text-gray-500" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-900">Shop {index + 1}</p>
-                      <p className="text-xs text-gray-500">Colombo {index + 1}</p>
+                      <p className="text-sm font-medium text-gray-900">{shop.name}</p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1"><MapPin className="h-3 w-3" />{shop.area || '-'}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      Rs. {(50000 - index * 5000).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-green-600">+{15 - index}% vs last month</p>
-                  </div>
+                  <span className={`px-2 py-0.5 text-xs rounded-full ${shop.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                    {shop.status}
+                  </span>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activities</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[...Array(5)].map((_, index) => (
-                <div key={index} className="flex items-start">
-                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <MapPin className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-gray-900">
-                      Sales representative visited Shop {index + 1}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {index + 1} hour{index !== 0 ? 's' : ''} ago
-                    </p>
-                  </div>
-                </div>
-              ))}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="font-bold text-lg">New Shop</h2>
+              <button onClick={() => setIsModalOpen(false)}><X className="h-5 w-5" /></button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="text-sm font-medium">Agency *</label>
+                <select required className="w-full p-2 border rounded" value={formData.agency_id} onChange={e => setFormData({ ...formData, agency_id: e.target.value })}>
+                  <option value="">-- Select Agency --</option>
+                  {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Shop Name *</label>
+                <input required className="w-full p-2 border rounded" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Owner Name</label>
+                <input className="w-full p-2 border rounded" value={formData.owner_name} onChange={e => setFormData({ ...formData, owner_name: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Phone</label>
+                <input className="w-full p-2 border rounded" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Address</label>
+                <input className="w-full p-2 border rounded" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Area</label>
+                <input className="w-full p-2 border rounded" value={formData.area} onChange={e => setFormData({ ...formData, area: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Shop Type</label>
+                <select className="w-full p-2 border rounded" value={formData.shop_type} onChange={e => setFormData({ ...formData, shop_type: e.target.value })}>
+                  <option>Retail</option>
+                  <option>Wholesale</option>
+                  <option>HORECA</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Credit Limit</label>
+                <input type="number" className="w-full p-2 border rounded" value={formData.credit_limit} onChange={e => setFormData({ ...formData, credit_limit: Number(e.target.value) })} />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600">Cancel</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Save Shop</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
