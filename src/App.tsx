@@ -20,6 +20,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AgencyManagement from './pages/admin/AgencyManagement';
 import UserManagement from './pages/admin/UserManagement';
 import InventoryMaster from './pages/admin/InventoryMaster';
+import SettingsDashboard from './pages/settings/Dashboard';
 
 // Phase 0-5 new pages
 import BookingDashboard from './pages/bookings/Dashboard';
@@ -96,6 +97,7 @@ function App() {
           <Route path="gps/manager"      element={<ManagerMapView />} />
 
           {/* Phase 4 — Reports */}
+          <Route path="settings"      element={<SettingsDashboard />} />
           <Route path="reports/*"        element={<ReportsDashboard />} />
 
           {/* Phase 5 — POS + Route Optimization */}
