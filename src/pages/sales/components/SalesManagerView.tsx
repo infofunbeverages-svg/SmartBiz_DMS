@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useSalesStore } from '../../../stores/salesStore';
-import { agencies } from '../../../lib/mockData';
+import { useAgencyStore } from '../../../stores/agencyStore';
 
 const SalesManagerView: React.FC = () => {
   const [selectedView, setSelectedView] = useState<'overview' | 'agency'>('overview');
