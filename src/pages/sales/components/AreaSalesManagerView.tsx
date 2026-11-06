@@ -14,9 +14,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import Button from '../../../components/ui/Button';
 import { useSalesStore } from '../../../stores/salesStore';
 import { useAuthStore } from '../../../lib/auth';
-import { agencies } from '../../../lib/mockData';
+import { useAgencyStore } from '../../../stores/agencyStore';
 
 const AreaSalesManagerView: React.FC = () => {
+  const { agencies, fetchAgencies } = useAgencyStore();
+
+React.useEffect(() => {
+  fetchAgencies();
+}, []);
   const [selectedAgency, setSelectedAgency] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('current-month');
   
