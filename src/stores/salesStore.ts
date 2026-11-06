@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { SalesRecord, SalesTarget, SalesTerritory, SalesPerformance, SalesStats } from '../types/sales';
 import { useAuthStore } from '../lib/auth';
 import { UserRole } from '../types/user';
-import { sales, agencies, products } from '../lib/mockData';
 import { supabase } from '../lib/supabase';
 
 interface SalesState {
@@ -58,15 +57,15 @@ export const useSalesStore = create<SalesState>((set, get) => ({
         invoices.map(async (invoice) => {
           // Fetch related data
           const [agencyResult, shopResult, userResult] = await Promise.all([
-            supabase.from('companies').select('name').eq('id', invoice.companyId).single(),
-            supabase.from('customers').select('name').eq('id', invoice.customerId).single(),
+            supabase.from('agencies').select('name').eq('id', invoice.companyId).single(),
+            supabase.from('shops').select('name').eq('id', invoice.customerId).single(),
             supabase.from('profiles').select('full_name').eq('id', invoice.salesRepId).single(),
           ]);
 
           // Fetch product details for items
           const inventoryIds = invoice.items.map(item => item.inventoryId);
           const { data: products } = await supabase
-            .from('inventory')
+            .from('products')
             .select('id, name, price')
             .in('id', inventoryIds);
 
@@ -393,11 +392,8 @@ export const useSalesStore = create<SalesState>((set, get) => ({
   }
 }));
 
-// Helper functions for generating mock data
-function generateMockSalesData(user: any): SalesRecord[] {
-  const records: SalesRecord[] = [];
-  
-  // Generate different amounts of data based on user role
+
+ // Generate different amounts of data based on user role
   let recordCount = 100;
   let agencyFilter: string[] = [];
   
