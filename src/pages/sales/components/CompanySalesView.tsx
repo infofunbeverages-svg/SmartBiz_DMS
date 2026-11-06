@@ -12,7 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useSalesStore } from '../../../stores/salesStore';
-import { agencies } from '../../../lib/mockData';
+import { useAgencyStore } from '../../../stores/agencyStore';
 
 const CompanySalesView: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('current-month');
