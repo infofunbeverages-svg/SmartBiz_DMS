@@ -8,6 +8,7 @@ import { useSFAStore } from '../../../stores/sfaStore';
 import { bookingService, productService } from '../../../lib/supabaseServices';
 import { Product } from '../../../types/inventory';
 import { BookingItem } from '../../../types/sfa';
+import ShopPicker, { PickerShop } from '../../../components/ShopPicker';
 
 interface Props { onSaved: () => void; }
 
@@ -18,6 +19,7 @@ const BookingEntry: React.FC<Props> = ({ onSaved }) => {
   const [products, setProducts]     = useState<Product[]>([]);
   const [shopId, setShopId]         = useState('');
   const [shopName, setShopName]     = useState('');
+  const [shop, setShop]             = useState<PickerShop | null>(null);
   const [expectedDate, setExpected] = useState('');
   const [items, setItems]           = useState<BookingItem[]>([]);
   const [gpsLocked, setGpsLocked]   = useState(false);
@@ -84,10 +86,20 @@ const BookingEntry: React.FC<Props> = ({ onSaved }) => {
 
   const subtotal = items.filter(i => !i.isFree).reduce((s, i) => s + i.totalAmount, 0);
 
+  // Credit limit check (limit 0 / empty = no limit)
+  const creditLimit = Number(shop?.credit_limit || 0);
+  const outstanding = Number(shop?.outstanding || 0);
+  const creditExceeded = !!shop && creditLimit > 0 && outstanding + subtotal > creditLimit;
+  const creditLeft = creditLimit - outstanding;
+
+  const pickShop = (s: PickerShop) => { setShop(s); setShopId(s.id); setShopName(s.name); };
+  const clearShop = () => { setShop(null); setShopId(''); setShopName(''); };
+
   const handleSave = async () => {
     if (!gpsLocked) { setGpsError('GPS enable කරන්නේ නැතුව booking save කරන්න බෑ!'); return; }
     if (!shopId || !shopName) { alert('Shop select කරන්න!'); return; }
     if (!items.length) { alert('අවම වශයෙන් item 1ක් add කරන්න!'); return; }
+    if (creditExceeded) { alert(`Credit limit ඉක්මවා ඇත! Limit: Rs. ${creditLimit.toLocaleString()}, Outstanding: Rs. ${outstanding.toLocaleString()}`); return; }
     if (!user?.agencyId) { alert('Agency scope නැහැ — admin ට කියන්න!'); return; }
 
     setSaving(true);
@@ -136,13 +148,31 @@ const BookingEntry: React.FC<Props> = ({ onSaved }) => {
       <Card>
         <CardHeader><CardTitle>Shop Details</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Shop Name *</label>
-            <Input value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Shop name ලියන්න" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Shop ID *</label>
-            <Input value={shopId} onChange={e => setShopId(e.target.value)} placeholder="Shop ID" />
+          <div className="md:col-span-2">
+            {shop ? (
+              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">{shop.name}</div>
+                    <div className="text-sm text-slate-500">{[shop.owner_name, shop.address || shop.area].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  <button type="button" onClick={clearShop} className="text-sm text-slate-500 underline">Change</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-2"><div className="text-slate-500 text-xs">Credit limit</div><div className="font-semibold">{creditLimit > 0 ? `Rs. ${creditLimit.toLocaleString()}` : 'No limit'}</div></div>
+                  <div className="rounded-lg bg-slate-50 p-2"><div className="text-slate-500 text-xs">Outstanding</div><div className="font-semibold">Rs. {outstanding.toLocaleString()}</div></div>
+                  <div className="rounded-lg bg-slate-50 p-2"><div className="text-slate-500 text-xs">Available</div><div className="font-semibold">{creditLimit > 0 ? `Rs. ${Math.max(creditLeft, 0).toLocaleString()}` : '—'}</div></div>
+                </div>
+                {creditExceeded && (
+                  <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">
+                    <AlertCircle size={16} className="mt-0.5" />
+                    <span>This booking (Rs. {subtotal.toLocaleString()}) exceeds the available credit (Rs. {Math.max(creditLeft, 0).toLocaleString()}). Reduce the order or collect payment first.</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <ShopPicker onSelect={pickShop} />
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery Date</label>
