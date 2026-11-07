@@ -24,8 +24,8 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon, label, active, onClick }) =
     <Link
       to={to}
       className={`flex items-center px-4 py-3 text-sm ${
-        active ? 'bg-blue-700 text-white' : 'text-gray-300 hover:bg-blue-700/30 hover:text-white'
-      } rounded-md transition-colors`}
+        active ? 'bg-white/15 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+      } rounded-xl transition-colors`}
       onClick={onClick}
     >
       <span className="mr-3">{icon}</span>
@@ -121,18 +121,18 @@ const MainLayout: React.FC = () => {
   const viewOnly = isViewOnly(user);
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-slate-100">
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-blue-800 text-white transition-transform duration-300 ease-in-out transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
-        <div className="flex items-center justify-between h-16 px-4 border-b border-blue-700">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-[#162f55] to-[#0a1730] text-white transition-transform duration-300 ease-in-out transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:z-auto`}>
+        <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
           <Link to="/dashboard" className="flex items-center">
-            <Package className="h-8 w-8 text-white" />
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 flex items-center justify-center"><Package className="h-5 w-5 text-white" /></div>
             <span className="ml-2 text-xl font-bold">Smartbiz DMS</span>
           </Link>
-          <button className="p-1 rounded-md lg:hidden hover:bg-blue-700" onClick={() => setSidebarOpen(false)}>
+          <button className="p-1 rounded-md lg:hidden hover:bg-white/10" onClick={() => setSidebarOpen(false)}>
             <X size={24} />
           </button>
         </div>
@@ -179,7 +179,7 @@ const MainLayout: React.FC = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-5 w-5 text-gray-400" />
                   </div>
-                  <input type="text" placeholder="Search..." className="block w-full bg-gray-100 border border-transparent rounded-md py-2 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:bg-white focus:border-blue-300" />
+                  <input type="text" placeholder="Search..." className="block w-full bg-gray-100 border border-transparent rounded-xl py-2.5 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:bg-white focus:border-blue-300" />
                 </div>
               </div>
 
@@ -211,13 +211,13 @@ const MainLayout: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto bg-gray-100 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-auto bg-slate-100 p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
 
         <footer className="bg-white border-t border-gray-200 py-4 px-4 sm:px-6 lg:px-8">
           <div className="text-center text-sm text-gray-500">
-            <p>All rights reserved Smartbiz DMS 2026</p>
+            <p>All rights reserved Smartbiz DMS 2026 <span className="mx-2 text-gray-300">|</span> <Link to="/terms" className="hover:text-blue-700">Terms &amp; conditions</Link> <span className="mx-2 text-gray-300">|</span> <Link to="/privacy" className="hover:text-blue-700">Privacy Policy</Link></p>
           </div>
         </footer>
       </div>

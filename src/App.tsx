@@ -20,6 +20,8 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AgencyManagement from './pages/admin/AgencyManagement';
 import UserManagement from './pages/admin/UserManagement';
 import InventoryMaster from './pages/admin/InventoryMaster';
+import PrivacyPolicy from './pages/legal/PrivacyPolicy';
+import Terms from './pages/legal/Terms';
 import SettingsDashboard from './pages/settings/Dashboard';
 
 // Phase 0-5 new pages
@@ -65,6 +67,8 @@ function App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true, v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true }}>
       <Routes>
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
         {/* Auth */}
         <Route path="/" element={<AuthLayout />}>
           <Route index element={<Navigate to="/login" />} />

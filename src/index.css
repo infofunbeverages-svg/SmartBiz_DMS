@@ -33,3 +33,6 @@ input, button, select, textarea {
     white-space: nowrap;
   }
 }
+
+body { background-color: #f1f5f9; }
+.card { background:#fff; border-radius:1rem; box-shadow:0 1px 3px rgba(15,23,42,.08); border:1px solid #e2e8f0; }

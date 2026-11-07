@@ -11,8 +11,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, icon, iconPosition = 'left', fullWidth = true, className = '', ...props }, ref) => {
     const inputClasses = `
-      px-4 py-2 border border-gray-300 rounded-md
-      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+      w-full px-4 py-3 border border-slate-200 rounded-xl shadow-sm bg-white
+      focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500
       disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed
       ${error ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}
       ${icon && iconPosition === 'left' ? 'pl-10' : ''}
