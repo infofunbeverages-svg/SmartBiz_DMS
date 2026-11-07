@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Account, AccountTransaction, AccountSummary, ShopOutstanding } from '../types/account';
 import { useAuthStore } from '../lib/auth';
 import { UserRole } from '../types/user';
+import { supabase } from '../lib/supabase';
+import { AccountType, AccountStatus, TransactionType, TransactionStatus } from '../types/account';
 
 interface AccountState {
   accounts: Account[];
@@ -39,23 +41,78 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   fetchAccountData: async () => {
     set({ loading: true, error: null });
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const { user } = useAuthStore.getState();
-      const mockAccounts = generateMockAccounts(user);
-      const mockTransactions = generateMockTransactions(user);
-      const mockSummary = generateMockSummary(user);
-      const mockOutstandings = generateMockOutstandings(user);
-      
-      set({
-        accounts: mockAccounts,
-        transactions: mockTransactions,
-        accountSummary: mockSummary,
-        shopOutstandings: mockOutstandings,
-        loading: false
-      });
-    } catch (error) {
-      set({ error: 'Failed to fetch account data', loading: false });
+      const [ag, led, sh] = await Promise.all([
+        supabase.from('agencies').select('*').order('name'),
+        supabase.from('agency_ledger').select('*').order('date', { ascending: true }).order('created_at', { ascending: true }),
+        supabase.from('shops').select('*').order('name'),
+      ]);
+      const firstErr = ag.error || led.error || sh.error;
+      if (firstErr) throw firstErr;
+
+      const agencies = ag.data || [];
+      const shops = sh.data || [];
+
+      const accounts: Account[] = [
+        ...agencies.map((a: any): Account => ({
+          id: a.id, accountNumber: a.code || a.id.slice(0, 8).toUpperCase(), accountName: a.name,
+          accountType: AccountType.AGENCY, balance: Number(a.outstanding || 0), currency: 'LKR',
+          companyId: a.company_id, customerId: a.id,
+          status: a.status === 'ACTIVE' ? AccountStatus.ACTIVE : AccountStatus.INACTIVE,
+          creditLimit: Number(a.credit_limit || 0), createdAt: a.created_at, updatedAt: a.created_at,
+        })),
+        ...shops.map((x: any): Account => ({
+          id: x.id, accountNumber: x.id.slice(0, 8).toUpperCase(), accountName: x.name,
+          accountType: AccountType.SHOP, balance: Number(x.outstanding || 0), currency: 'LKR',
+          companyId: x.company_id, customerId: x.id,
+          status: x.status === 'ACTIVE' ? AccountStatus.ACTIVE : AccountStatus.INACTIVE,
+          creditLimit: Number(x.credit_limit || 0), createdAt: x.created_at, updatedAt: x.created_at,
+        })),
+      ];
+
+      // Ledger rows -> transactions with a running balance per agency
+      const running = new Map<string, number>();
+      const transactions: AccountTransaction[] = (led.data || []).map((r: any) => {
+        const debit = Number(r.debit || 0), credit = Number(r.credit || 0);
+        const bal = (running.get(r.agency_id) || 0) + debit - credit;
+        running.set(r.agency_id, bal);
+        const t = String(r.type || '').toUpperCase();
+        const st = String(r.status || '').toUpperCase();
+        return {
+          id: r.id, accountId: r.agency_id, customerId: r.agency_id, companyId: r.company_id,
+          type: (Object.values(TransactionType) as string[]).includes(t)
+            ? (t as TransactionType) : (debit > 0 ? TransactionType.DEBIT : TransactionType.CREDIT),
+          amount: debit > 0 ? debit : credit, balance: bal,
+          description: r.description || r.type || '', reference: r.reference || undefined,
+          date: r.date, status: (Object.values(TransactionStatus) as string[]).includes(st)
+            ? (st as TransactionStatus) : TransactionStatus.COMPLETED,
+          createdBy: '', createdAt: r.created_at, updatedAt: r.created_at,
+        } as AccountTransaction;
+      }).reverse(); // newest first
+
+      const shopOutstandings: ShopOutstanding[] = shops
+        .filter((x: any) => Number(x.outstanding || 0) > 0)
+        .map((x: any) => ({
+          customerId: x.id, shopName: x.name, shopAddress: x.address || x.area || '',
+          totalOutstanding: Number(x.outstanding || 0), overdueAmount: 0,
+          creditLimit: Number(x.credit_limit || 0), paymentTerms: 0, transactions: [],
+        }));
+
+      const totalReceivables = agencies.reduce((s: number, a: any) => s + Number(a.outstanding || 0), 0);
+      const totalLimit = agencies.reduce((s: number, a: any) => s + Number(a.credit_limit || 0), 0);
+      const overdueAmount = (led.data || [])
+        .filter((r: any) => String(r.status || '').toUpperCase() === 'OVERDUE')
+        .reduce((s: number, r: any) => s + Number(r.debit || 0) - Number(r.credit || 0), 0);
+
+      const accountSummary: AccountSummary = {
+        totalBalance: totalReceivables, totalReceivables, totalPayables: 0, overdueAmount,
+        creditUtilization: totalLimit > 0 ? Math.round((totalReceivables / totalLimit) * 100) : 0,
+        accountsCount: accounts.length,
+      };
+
+      set({ accounts, transactions, accountSummary, shopOutstandings, loading: false });
+    } catch (e: any) {
+      console.error('fetchAccountData:', e);
+      set({ error: e?.message || 'Failed to fetch account data', loading: false });
     }
   },
 
@@ -136,9 +193,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     
     // Distributor (Agency Owner) - Agency Control Only
     if (user.role === UserRole.AGENCY_OWNER && user.companyId) {
-      return accounts.filter(account => 
-        account.companyId === user.companyId || account.accountType === 'AGENCY'
-      );
+      return accounts; // rows are already limited by Supabase RLS
     }
     
     // Sales Representative - Shop Outstanding Only (handled separately)
@@ -167,12 +222,12 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     
     // Distributor - Agency transactions only
     if (user.role === UserRole.AGENCY_OWNER && user.companyId) {
-      return transactions.filter(transaction => transaction.companyId === user.companyId);
+      return transactions; // already limited by RLS
     }
     
     // Sales Rep - Shop transactions only
     if (user.role === UserRole.SALES_REP) {
-      return transactions.filter(transaction => transaction.salesRepId === user.id);
+      return transactions;
     }
     
     return [];
@@ -186,16 +241,12 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     
     // Sales Rep - Only shops they manage
     if (user.role === UserRole.SALES_REP) {
-      return shopOutstandings.filter(outstanding => 
-        outstanding.transactions.some(t => t.salesRepId === user.id)
-      );
+      return shopOutstandings; // RLS limits shops to this rep's scope
     }
     
     // Agency Owner - Only shops in their agency
     if (user.role === UserRole.AGENCY_OWNER && user.companyId) {
-      return shopOutstandings.filter(outstanding =>
-        outstanding.transactions.some(t => t.companyId === user.companyId)
-      );
+      return shopOutstandings;
     }
     
     // Company and Accountant - All shops
@@ -223,146 +274,3 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     return accountSummary;
   }
 }));
-
-// Helper functions for generating mock data
-function generateMockAccounts(user: any): Account[] {
-  const accounts: Account[] = [];
-  
-  if (!user) return accounts;
-  
-  // Company accounts (visible to all except sales reps)
-  if (user.role !== UserRole.SALES_REP) {
-    accounts.push(
-      {
-        id: 'acc-company-1',
-        accountNumber: 'COMP-001',
-        accountName: 'Main Company Account',
-        accountType: 'COMPANY',
-        balance: 5000000,
-        currency: 'LKR',
-        status: 'ACTIVE',
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z'
-      },
-      {
-        id: 'acc-bank-1',
-        accountNumber: 'BANK-001',
-        accountName: 'Commercial Bank Current',
-        accountType: 'BANK',
-        balance: 2500000,
-        currency: 'LKR',
-        status: 'ACTIVE',
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z'
-      }
-    );
-  }
-  
-  // Agency accounts
-  if (user.role === UserRole.AGENCY_OWNER || [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.ACCOUNTANT].includes(user.role)) {
-    const companyId = user.companyId || 'agency-1';
-    accounts.push({
-      id: `acc-agency-${companyId}`,
-      accountNumber: `AGY-${companyId.toUpperCase()}`,
-      accountName: `Agency ${companyId} Account`,
-      accountType: 'AGENCY',
-      companyId,
-      balance: 750000,
-      currency: 'LKR',
-      status: 'ACTIVE',
-      creditLimit: 1000000,
-      paymentTerms: 30,
-      createdAt: '2023-02-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    });
-  }
-  
-  // Shop accounts
-  for (let i = 1; i <= 5; i++) {
-    accounts.push({
-      id: `acc-shop-${i}`,
-      accountNumber: `SHOP-${String(i).padStart(3, '0')}`,
-      accountName: `Shop ${i} Account`,
-      accountType: 'SHOP',
-      customerId: `shop-${i}`,
-      companyId: user.companyId || 'agency-1',
-      balance: -Math.random() * 50000,
-      currency: 'LKR',
-      status: 'ACTIVE',
-      creditLimit: 100000,
-      paymentTerms: 15,
-      createdAt: '2023-03-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    });
-  }
-  
-  return accounts;
-}
-
-function generateMockTransactions(user: any): AccountTransaction[] {
-  const transactions: AccountTransaction[] = [];
-  
-  if (!user) return transactions;
-  
-  for (let i = 1; i <= 20; i++) {
-    const isCredit = Math.random() > 0.5;
-    const amount = Math.floor(Math.random() * 50000) + 5000;
-    
-    transactions.push({
-      id: `txn-${i}`,
-      accountId: `acc-shop-${Math.floor(Math.random() * 5) + 1}`,
-      type: isCredit ? 'CREDIT' : 'DEBIT',
-      amount,
-      balance: Math.random() * 100000 - 50000,
-      description: isCredit ? `Payment received - INV-${1000 + i}` : `Invoice - INV-${1000 + i}`,
-      reference: `REF-${1000 + i}`,
-      invoiceNumber: `INV-${1000 + i}`,
-      paymentMethod: ['CASH', 'BANK_TRANSFER', 'CARD'][Math.floor(Math.random() * 3)],
-      companyId: user.companyId || 'agency-1',
-      customerId: `shop-${Math.floor(Math.random() * 5) + 1}`,
-      salesRepId: user.role === UserRole.SALES_REP ? user.id : `rep-${Math.floor(Math.random() * 3) + 1}`,
-      date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      dueDate: new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      status: ['PENDING', 'COMPLETED', 'OVERDUE'][Math.floor(Math.random() * 3)],
-      createdBy: user.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-  }
-  
-  return transactions;
-}
-
-function generateMockSummary(user: any): AccountSummary {
-  return {
-    totalBalance: 2750000,
-    totalReceivables: 450000,
-    totalPayables: 180000,
-    overdueAmount: 75000,
-    creditUtilization: 65,
-    accountsCount: 15
-  };
-}
-
-function generateMockOutstandings(user: any): ShopOutstanding[] {
-  const outstandings: ShopOutstanding[] = [];
-  
-  for (let i = 1; i <= 10; i++) {
-    const outstanding = Math.floor(Math.random() * 80000) + 10000;
-    const overdue = Math.floor(outstanding * 0.3);
-    
-    outstandings.push({
-      customerId: `shop-${i}`,
-      shopName: `Shop ${i}`,
-      shopAddress: `Address ${i}, Colombo`,
-      totalOutstanding: outstanding,
-      overdueAmount: overdue,
-      lastPaymentDate: new Date(Date.now() - Math.random() * 15 * 24 * 60 * 60 * 1000).toISOString(),
-      creditLimit: 100000,
-      paymentTerms: 15,
-      transactions: []
-    });
-  }
-  
-  return outstandings;
-}

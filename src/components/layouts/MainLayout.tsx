@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu, X, LayoutDashboard, Package, ShoppingCart, Truck,
-  Users, Receipt, LogOut, Store, Settings, CreditCard,
+  Users, Receipt, Power, QrCode, MapPin, CalendarDays, LogOut, Store, Settings, CreditCard,
   FileText, Building, Map, ChevronDown, Bell, User,
   Search, TrendingUp, Wallet, ClipboardList, Eye,
 } from 'lucide-react';
@@ -62,6 +62,14 @@ const MainLayout: React.FC = () => {
     {
       label: 'Distribution',
       items: [
+        { to: '/duty',       icon: <Power size={20} />,           label: 'Duty On/Off',
+          roles: [UserRole.SALES_REP, UserRole.CASH_COLLECTOR, UserRole.AREA_SALES_MANAGER, UserRole.SALES_MANAGER, UserRole.REGIONAL_MANAGER, UserRole.SUPER_ADMIN] },
+        { to: '/route-plans', icon: <CalendarDays size={20} />,    label: 'Route Plans',
+          roles: [UserRole.SALES_REP, UserRole.AGENCY_OWNER, UserRole.SALES_MANAGER, UserRole.AREA_SALES_MANAGER, UserRole.REGIONAL_MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN] },
+        { to: '/visits',     icon: <MapPin size={20} />,          label: 'Shop Visits',
+          roles: [UserRole.SALES_REP, UserRole.AREA_SALES_MANAGER, UserRole.SALES_MANAGER, UserRole.REGIONAL_MANAGER, UserRole.SUPER_ADMIN] },
+        { to: '/shop-qr',    icon: <QrCode size={20} />,          label: 'Shop QR Codes',
+          roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.AGENCY_OWNER, UserRole.AGENCY_CLERK, UserRole.SALES_MANAGER, UserRole.SALES_ADMIN, UserRole.AREA_SALES_MANAGER] },
         { to: '/bookings',   icon: <ClipboardList size={20} />,   label: 'Bookings (SFA)',
           roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.AGENCY_OWNER, UserRole.AGENCY_CLERK, UserRole.SALES_MANAGER, UserRole.AREA_SALES_MANAGER, UserRole.REGIONAL_MANAGER, UserRole.SALES_REP, UserRole.CASH_COLLECTOR] },
         { to: '/agencies',   icon: <Building size={20} />,        label: 'Agencies',

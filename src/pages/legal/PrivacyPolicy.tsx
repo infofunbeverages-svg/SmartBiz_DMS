@@ -49,7 +49,7 @@ const sections: LegalSection[] = [
     'We may use approved third-party services for hosting, authentication, mapping and diagnostics. These providers process data only to deliver their services and are subject to their own privacy terms.'] },
   { title: "Children's Privacy", paras: ['The platform is not intended for anyone under 18 and does not knowingly collect information from children.'] },
   { title: 'Changes to This Policy', paras: ['We may update this policy as features or laws change. Updated versions are published here with a new revision date.'] },
-  { title: 'Contact Information', paras: ['Application: SmartBiz DMS / SmartBiz SFA', 'info.smartbizsoftwares@gmail.com', 'Address: Kananvila, Horana, Srilanka'] },
+  { title: 'Contact Information', paras: ['Application: SmartBiz DMS / SmartBiz SFA', 'Email: support@smartbiz.lk', 'Address: [Your registered business address]'] },
 ];
 
 const PrivacyPolicy: React.FC = () => (

@@ -52,108 +52,38 @@ const Dashboard: React.FC = () => {
 
   const loadRecentActivities = async () => {
     try {
-      const activities: RecentActivity[] = [];
+      const [bk, inv, pay] = await Promise.all([
+        supabase.from('bookings').select('id, booking_number, created_at, agency_id').order('created_at', { ascending: false }).limit(5),
+        supabase.from('invoices').select('id, invoice_no, created_at, payment_status').order('created_at', { ascending: false }).limit(5),
+        supabase.from('agency_payments').select('id, amount, created_at, agency_id').order('created_at', { ascending: false }).limit(5),
+      ]);
 
-      // Fetch recent orders - wrapped in try-catch to prevent crashes
-      try {
-        const { data: recentOrders, error: ordersError } = await supabase
-          .from('draft_invoices')
-          .select('id, created_at, company_id')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (ordersError) {
-          console.warn('Error fetching orders (table may not exist):', ordersError);
-        } else if (recentOrders && recentOrders.length > 0) {
-          // Fetch agency names for the orders
-          try {
-            const companyIds = [...new Set(recentOrders.map((o: any) => o.company_id).filter(Boolean))];
-            let agencyMap: Record<string, string> = {};
-            
-            if (companyIds.length > 0) {
-              const { data: agencies, error: agencyError } = await supabase
-                .from('companies')
-                .select('id, name')
-                .in('id', companyIds);
-              
-              if (agencyError) {
-                console.warn('Error fetching agencies:', agencyError);
-              } else if (agencies) {
-                agencies.forEach((agency: any) => {
-                  agencyMap[agency.id] = agency.name;
-                });
-              }
-            }
-
-            recentOrders.forEach((order: any) => {
-              const agencyName = agencyMap[order.company_id] || 'an agency';
-              activities.push({
-                id: `order-${order.id}`,
-                type: 'order',
-                message: `New order received from ${agencyName}`,
-                timestamp: order.created_at,
-              });
-            });
-          } catch (err) {
-            console.warn('Error processing orders:', err);
-          }
-        }
-      } catch (err) {
-        console.warn('Error loading orders:', err);
+      const agencyIds = [...new Set([...(bk.data || []), ...(pay.data || [])].map((r: any) => r.agency_id).filter(Boolean))];
+      const names: Record<string, string> = {};
+      if (agencyIds.length) {
+        const { data: ags } = await supabase.from('agencies').select('id, name').in('id', agencyIds);
+        (ags || []).forEach((a: any) => { names[a.id] = a.name; });
       }
 
-      // Fetch recent invoices (payments) - wrapped in try-catch
-      try {
-        const { data: recentInvoices, error: invoicesError } = await supabase
-          .from('invoices')
-          .select('id, created_at, company_id, payment_status')
-          .eq('payment_status', 'PAID')
-          .order('created_at', { ascending: false })
-          .limit(3);
-
-        if (invoicesError) {
-          console.warn('Error fetching invoices (table may not exist):', invoicesError);
-        } else if (recentInvoices && recentInvoices.length > 0) {
-          // Fetch agency names for the invoices
-          try {
-            const invoiceAgencyIds = [...new Set(recentInvoices.map((i: any) => i.company_id).filter(Boolean))];
-            let invoiceAgencyMap: Record<string, string> = {};
-            
-            if (invoiceAgencyIds.length > 0) {
-              const { data: agencies, error: agencyError } = await supabase
-                .from('companies')
-                .select('id, name')
-                .in('id', invoiceAgencyIds);
-              
-              if (agencyError) {
-                console.warn('Error fetching agencies for invoices:', agencyError);
-              } else if (agencies) {
-                agencies.forEach((agency: any) => {
-                  invoiceAgencyMap[agency.id] = agency.name;
-                });
-              }
-            }
-
-            recentInvoices.forEach((invoice: any) => {
-              const agencyName = invoiceAgencyMap[invoice.company_id] || 'an agency';
-              activities.push({
-                id: `payment-${invoice.id}`,
-                type: 'payment',
-                message: `Payment received from ${agencyName}`,
-                timestamp: invoice.created_at,
-              });
-            });
-          } catch (err) {
-            console.warn('Error processing invoices:', err);
-          }
-        }
-      } catch (err) {
-        console.warn('Error loading invoices:', err);
-      }
-
-      // Sort by timestamp and take the 5 most recent
+      const activities: RecentActivity[] = [
+        ...(bk.data || []).map((r: any) => ({
+          id: `booking-${r.id}`, type: 'order' as const,
+          message: `Booking ${r.booking_number || ''} from ${names[r.agency_id] || 'an agency'}`,
+          timestamp: r.created_at,
+        })),
+        ...(inv.data || []).map((r: any) => ({
+          id: `invoice-${r.id}`, type: 'delivery' as const,
+          message: `Invoice ${r.invoice_no || ''} ${r.payment_status ? '(' + r.payment_status + ')' : ''}`,
+          timestamp: r.created_at,
+        })),
+        ...(pay.data || []).map((r: any) => ({
+          id: `payment-${r.id}`, type: 'payment' as const,
+          message: `Payment Rs. ${Number(r.amount || 0).toLocaleString()} from ${names[r.agency_id] || 'an agency'}`,
+          timestamp: r.created_at,
+        })),
+      ];
       activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setRecentActivities(activities.slice(0, 5));
+      setRecentActivities(activities.slice(0, 6));
     } catch (err) {
       console.error('Error loading recent activities:', err);
       setRecentActivities([]);

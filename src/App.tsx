@@ -22,6 +22,10 @@ import UserManagement from './pages/admin/UserManagement';
 import InventoryMaster from './pages/admin/InventoryMaster';
 import PrivacyPolicy from './pages/legal/PrivacyPolicy';
 import Terms from './pages/legal/Terms';
+import RoutePlans from './pages/routeplans/RoutePlans';
+import ShopVisits from './pages/visits/ShopVisits';
+import ShopQrCodes from './pages/shopqr/ShopQrCodes';
+import DutyOnOff from './pages/duty/DutyOnOff';
 import SettingsDashboard from './pages/settings/Dashboard';
 
 // Phase 0-5 new pages
@@ -101,6 +105,10 @@ function App() {
           <Route path="gps/manager"      element={<ManagerMapView />} />
 
           {/* Phase 4 — Reports */}
+          <Route path="route-plans"   element={<RoutePlans />} />
+          <Route path="visits"        element={<ShopVisits />} />
+          <Route path="shop-qr"       element={<ShopQrCodes />} />
+          <Route path="duty"          element={<DutyOnOff />} />
           <Route path="settings"      element={<SettingsDashboard />} />
           <Route path="reports/*"        element={<ReportsDashboard />} />
 
